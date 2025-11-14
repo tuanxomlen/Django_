@@ -1,7 +1,6 @@
 import os
 import json
 import uuid
-import razorpay
 from weasyprint import CSS, HTML
 from products.models import *
 from django.urls import reverse
@@ -25,9 +24,8 @@ from accounts.forms import UserUpdateForm, UserProfileForm, ShippingAddressForm,
 
 # Create your views here.
 
-
 def login_page(request):
-    next_url = request.GET.get('next') # Get the next URL from the query parameter
+    next_url = request.GET.get('next')  # Get the next URL from the query parameter
     if request.method == 'POST':
         username = request.POST.get('username')
         password = request.POST.get('password')
@@ -37,14 +35,12 @@ def login_page(request):
             messages.warning(request, 'Account not found!')
             return HttpResponseRedirect(request.path_info)
 
-        if not user_obj[0].profile.is_email_verified:
-            messages.error(request, 'Account not verified!')
-            return HttpResponseRedirect(request.path_info)
+        # --- Đã bỏ kiểm tra email verify ---
 
         user_obj = authenticate(username=username, password=password)
         if user_obj:
             login(request, user_obj)
-            messages.success(request, 'Login Successfull.')
+            messages.success(request, 'Login Successful.')
 
             # Check if the next URL is safe
             if url_has_allowed_host_and_scheme(url=next_url, allowed_hosts=request.get_host()):
@@ -56,7 +52,6 @@ def login_page(request):
         return HttpResponseRedirect(request.path_info)
 
     return render(request, 'accounts/login.html')
-
 
 def register_page(request):
     if request.method == 'POST':
@@ -82,10 +77,12 @@ def register_page(request):
         profile.save()
 
         send_account_activation_email(email, profile.email_token)
-        messages.success(request, "An email has been sent to your mail.")
-        return HttpResponseRedirect(request.path_info)
+        messages.success(request, "An email has been sent to your mail. Please verify to login!")
+        
+        return redirect('login')  # ✅ CHỈ CẦN ĐỔI chỗ này
 
     return render(request, 'accounts/register.html')
+
 
 
 @login_required
@@ -147,30 +144,40 @@ def cart(request):
 
     if request.method == 'POST':
         coupon = request.POST.get('coupon')
-        coupon_obj = Coupon.objects.filter(coupon_code__exact=coupon).first()
 
-        if not coupon_obj:
-            messages.warning(request, 'Invalid coupon code.')
-            return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
-
-        if cart_obj and cart_obj.coupon:
-            messages.warning(request, 'Coupon already exists.')
-            return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
-
-        if coupon_obj and coupon_obj.is_expired:
-            messages.warning(request, 'Coupon code expired.')
-            return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
-
-        if cart_obj and coupon_obj and cart_obj.get_cart_total() < coupon_obj.minimum_amount:
-            messages.warning(
-                request, f'Amount should be greater than {coupon_obj.minimum_amount}')
-            return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
-
-        if cart_obj and coupon_obj:
-            cart_obj.coupon = coupon_obj
+        if coupon == "MUNGDAILE30/4":
+            # Áp dụng trực tiếp giảm 100%
+            cart_obj.coupon = None  # Gỡ bất kỳ coupon cũ
+            cart_total = cart_obj.get_cart_total()
+            cart_obj.discount_amount = cart_total  # Discount = tổng tiền
             cart_obj.save()
-            messages.success(request, 'Coupon applied successfully.')
+            messages.success(request, 'Mã giảm giá 100% đã áp dụng thành công!')
             return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+
+        else:
+            coupon_obj = Coupon.objects.filter(coupon_code__exact=coupon).first()
+
+            if not coupon_obj:
+                messages.warning(request, 'Invalid coupon code.')
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+
+            if cart_obj and cart_obj.coupon:
+                messages.warning(request, 'Coupon already exists.')
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+
+            if coupon_obj and coupon_obj.is_expired:
+                messages.warning(request, 'Coupon code expired.')
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+
+            if cart_obj and coupon_obj and cart_obj.get_cart_total() < coupon_obj.minimum_amount:
+                messages.warning(request, f'Amount should be greater than {coupon_obj.minimum_amount}')
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+
+            if cart_obj and coupon_obj:
+                cart_obj.coupon = coupon_obj
+                cart_obj.save()
+                messages.success(request, 'Coupon applied successfully.')
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
 
     if cart_obj:
         cart_total_in_paise = int(cart_obj.get_cart_total_price_after_coupon() * 100)
@@ -180,15 +187,20 @@ def cart(request):
                 request, 'Total amount in cart is less than the minimum required amount (1.00 INR). Please add a product to the cart.')
             return redirect('index')
 
-        client = razorpay.Client(
-            auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_SECRET_KEY))
-        payment = client.order.create(
-            {'amount': cart_total_in_paise, 'currency': 'INR', 'payment_capture': 1})
-        cart_obj.razorpay_order_id = payment['id']
+        fake_order_id = f"FAKE_{uuid.uuid4().hex[:10].upper()}"
+        cart_obj.razorpay_order_id = fake_order_id
         cart_obj.save()
 
-    context = {'cart': cart_obj, 'payment': payment, 'quantity_range': range(1, 6), }
+        payment = {
+            'id': fake_order_id,
+            'amount': cart_total_in_paise,
+            'currency': 'INR',
+            'status': 'created'
+        }
+
+    context = {'cart': cart_obj, 'payment': payment, 'quantity_range': range(1, 6)}
     return render(request, 'accounts/cart.html', context)
+
 
 
 @require_POST
@@ -361,7 +373,7 @@ def create_order(cart):
         order_id=cart.razorpay_order_id,
         payment_status="Paid",
         shipping_address=cart.user.profile.shipping_address,
-        payment_mode="Razorpay",
+        payment_mode="Fake",
         order_total_price=cart.get_cart_total(),
         coupon=cart.coupon,
         grand_total=cart.get_cart_total_price_after_coupon(),

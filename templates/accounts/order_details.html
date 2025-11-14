@@ -1,6 +1,7 @@
 {% extends 'base/base.html' %}
 {% block title %}Order Details{% endblock title%}
 {% load static %} {% block start %}
+{% load humanize %}
 
 <section class="section-content padding-y">
   <div class="container">
@@ -37,7 +38,7 @@
                   {% endfor %}
                 {% endif %}
                 <td>{{ item.quantity }}</td>
-                <td>₹ {{ item.product_price }}</td>
+                <td>{{ item.product_price|intcomma }} VND </td>
               </tr>
               {% endfor %}
             </tbody>
@@ -103,21 +104,21 @@
             <dl class="dlist-align">
               <dt style="width: 135px;">Item(s) Subtotal:</dt>
               <dd class="text-right">
-                <strong>₹{{ order.order_total_price }}</strong>
+                <strong>{{ order.grand_total|intcomma }} VND</strong>
               </dd>
             </dl>
 
             <dl class="dlist-align">
               <dt style="width: 135px;">Coupon Applied:</dt>
               <dd class="text-right">
-                <strong>₹{{ order.coupon.discount_amount|default:"0" }}</strong>
+                <strong>{{ order.coupon.discount_amount|default:"0"|intcomma }} VND</strong>
               </dd>
             </dl>
 
             <dl class="dlist-align">
               <dt style="width: 135px;">Grand Total:</dt>
               <dd class="text-right">
-                <strong>₹{{ order.grand_total }}</strong>
+                <strong>{{ order.grand_total|intcomma }} VND</strong>
               </dd>
             </dl>
           </div>

@@ -9,7 +9,7 @@ from django.contrib.auth.models import User
 
 class Category(BaseModel):
     category_name = models.CharField(max_length=100)
-    slug = models.SlugField(unique=True, null=True, blank=True)
+    slug = models.SlugField(blank=True)  # Bỏ unique=True
     category_image = models.ImageField(upload_to="catgories")
 
     def save(self, *args, **kwargs):
